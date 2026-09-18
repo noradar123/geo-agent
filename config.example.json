@@ -1,0 +1,18 @@
+{
+  "url": "https://www.geoguessr.com/",
+  "profile_dir": ".browser-profile",
+  "browser_channel": null,
+  "viewport_width": 1440,
+  "viewport_height": 900,
+  "scene_selector": null,
+  "map_selector": null,
+  "map_rect": null,
+  "map_hover": null,
+  "submit_selector": null,
+  "round_selector": null,
+  "result_selector": null,
+  "settle_ms": 1200,
+  "min_location_confidence": 0.35,
+  "min_map_confidence": 0.6,
+  "map_change_tolerance": 0.002
+}

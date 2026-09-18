@@ -1,0 +1,9 @@
+#!/bin/sh
+# Scan the complete Git index before creating a commit.
+if [ -x .venv/Scripts/python.exe ]; then
+    exec .venv/Scripts/python.exe scripts/check_secrets.py
+elif [ -x .venv/bin/python ]; then
+    exec .venv/bin/python scripts/check_secrets.py
+else
+    exec python scripts/check_secrets.py
+fi

@@ -1,0 +1,9 @@
+#!/bin/sh
+# Scan committed history before transferring it to a remote.
+if [ -x .venv/Scripts/python.exe ]; then
+    exec .venv/Scripts/python.exe scripts/check_secrets.py --history
+elif [ -x .venv/bin/python ]; then
+    exec .venv/bin/python scripts/check_secrets.py --history
+else
+    exec python scripts/check_secrets.py --history
+fi

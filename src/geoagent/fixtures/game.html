@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<title>GeoAgent offline test fixture</title>
+<style>
+  body { margin: 24px; font: 20px system-ui; background: #e6edf1; }
+  #scene { width: 800px; height: 380px; background: linear-gradient(#a4d8f4 65%, #587546 65%); }
+  #scene p { padding: 40px; }
+  #map { position: relative; width: 600px; height: 300px; background: #b9deed; }
+  #map svg { display: block; width: 100%; height: 100%; pointer-events: none; }
+  #pin { position: absolute; width: 10px; height: 10px; background: red;
+    border-radius: 50%; transform: translate(-50%, -50%); pointer-events: none; }
+  #guess { margin-top: 12px; padding: 12px 32px; }
+  #result { padding: 16px; }
+</style>
+<div id="round">Round 1 / 1 — OFFLINE FIXTURE</div>
+<div id="scene"><p>FAKE STREET SCENE — integration testing only<br>台北市 / Taipei</p></div>
+<div id="map" aria-label="Test map">
+  <svg viewBox="0 0 600 300"><path fill="#c4d6b4" d="M30 35L170 25L210 90L160 145L115 130L70 90Z M175 165L245 155L260 250L220 280Z M305 30L450 25L550 80L460 140L340 100Z M320 120L395 130L410 200L360 255L320 180Z M470 215L555 205L570 265L495 270Z"/>
+    <text x="18" y="290" font-size="16">Synthetic map; fixed target = (75%, 30%)</text>
+  </svg>
+  <div id="pin" hidden></div>
+</div>
+<button id="guess" disabled>Guess</button>
+<div id="result" hidden></div>
+<script>
+  const map = document.getElementById('map'), pin = document.getElementById('pin');
+  const guess = document.getElementById('guess'), result = document.getElementById('result');
+  let point;
+  map.addEventListener('click', event => {
+    const r = map.getBoundingClientRect();
+    point = [(event.clientX - r.left) / r.width, (event.clientY - r.top) / r.height];
+    pin.hidden = false; pin.style.left = point[0] * 100 + '%';
+    pin.style.top = point[1] * 100 + '%'; guess.disabled = false;
+  });
+  guess.addEventListener('click', () => {
+    result.hidden = false;
+    result.textContent = `Submitted: ${Math.round(point[0] * 100)}%, ${Math.round(point[1] * 100)}%`;
+    guess.disabled = true;
+  });
+</script>
+</html>

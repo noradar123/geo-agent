@@ -1,0 +1,29 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "geoagent"
+version = "0.1.0"
+description = "Desktop screenshot location analysis with OpenAI vision"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = ["openai>=1.68,<3", "playwright>=1.51,<2", "pydantic>=2.10,<3", "python-dotenv>=1.0,<2", "Pillow>=11,<13"]
+
+[project.optional-dependencies]
+dev = ["pytest>=8,<10", "ruff>=0.11,<1"]
+
+[project.scripts]
+geoagent = "geoagent.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+geoagent = ["fixtures/*.html"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
