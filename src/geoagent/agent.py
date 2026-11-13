@@ -40,8 +40,6 @@ def play_round(page: Page, settings: Settings, vision, run_dir: Path, mode: str 
         guess = vision.locate([run_dir / "scene.png"], run_dir)
         report["location"] = guess.model_dump()
         save_json(run_dir / "location.json", guess.model_dump())
-        if guess.confidence < settings.min_location_confidence:
-            raise ValueError("Location confidence below threshold; inspect location.json")
         if round_identity(page, settings) != identity:
             raise ValueError("Game URL or round changed during location analysis")
         open_map(page, settings)
@@ -50,10 +48,8 @@ def play_round(page: Page, settings: Settings, vision, run_dir: Path, mode: str 
         target = vision.map_target(run_dir / "map.png", guess, run_dir)
         report["map_target"] = target.model_dump()
         save_json(run_dir / "map_target.json", target.model_dump())
-        if not target.visible or target.confidence < settings.min_map_confidence:
-            raise ValueError(
-                "Destination not reliably visible on map; expand/zoom the map and retry"
-            )
+        if not target.visible:
+            raise ValueError("Destination not visible on map; expand/zoom the map and retry")
         point = point_on_map(rect, target.x_fraction, target.y_fraction)
         report["click"] = point.model_dump()
         if mode == "dry-run":
@@ -146,18 +142,13 @@ class PlacementStopped(Exception):
     """A visible-evidence check failed; stop without clicking and record why."""
 
 
-class LowMapConfidence(PlacementStopped):
-    """The final click is visible but too uncertain; a coarser view would not be better."""
+def plan_map_click(layout: FixedLayout, target: MapTarget) -> Point:
+    """Convert a map_target result into a desktop pixel, rejecting unclickable placements.
 
-
-def plan_map_click(layout: FixedLayout, target: MapTarget, min_confidence: float) -> Point:
-    """Convert a map_target result into a desktop pixel, rejecting unsafe placements."""
+    Model confidence is recorded but never blocks a click: a real round always needs a guess.
+    """
     if not target.visible:
         raise PlacementStopped("Model reports the destination is not visible on the map")
-    if target.confidence < min_confidence:
-        raise LowMapConfidence(
-            f"Map confidence {target.confidence:.2f} is below {min_confidence:.2f}"
-        )
     m = layout.edge_margin
     if not (m <= target.x_fraction <= 1 - m and m <= target.y_fraction <= 1 - m):
         raise PlacementStopped("Destination is at the map edge; cannot zoom or click reliably")
@@ -256,8 +247,6 @@ def play_desktop_round(
         guess = vision.locate(scenes, run_dir)
         report["location"] = guess.model_dump()
         save_json(run_dir / "location.json", guess.model_dump())
-        if guess.confidence < settings.min_location_confidence:
-            raise PlacementStopped("Location confidence below threshold; inspect location.json")
         # location.json keeps the model's estimate; the map steps aim at the snapped point.
         guess, report["city_snap"] = snap_to_city(guess, settings)
         report["map_destination"] = {"latitude": guess.latitude, "longitude": guess.longitude}
@@ -266,7 +255,7 @@ def play_desktop_round(
         wait(layout.expand_wait_ms)
         report["status"] = "map_expanded"
 
-        def identify(name: str, zoom_ins: int, min_confidence: float):
+        def identify(name: str, zoom_ins: int):
             # Every identification uses a fresh screenshot: pixels from before a zoom are invalid.
             image = run_dir / f"{name}.png"
             shot = desktop.grab(layout.map_rect, image)
@@ -276,7 +265,7 @@ def play_desktop_round(
             report["steps"].append(step)
             save_json(run_dir / f"{name}_target.json", target.model_dump())
             try:
-                point = plan_map_click(layout, target, min_confidence)
+                point = plan_map_click(layout, target)
             except PlacementStopped as exc:
                 step["rejected"] = str(exc)
                 raise
@@ -284,14 +273,8 @@ def play_desktop_round(
             return shot, point
 
         for index in range(steps + 1):
-            final = index == steps
-            # Intermediate steps only pick the zoom anchor, so a visible but uncertain point
-            # is still useful; the confidence threshold applies to the click itself.
-            threshold = settings.min_map_confidence if final else 0.0
             try:
-                last_map, point = identify(f"map_{index}", index, threshold)
-            except LowMapConfidence:
-                raise
+                last_map, point = identify(f"map_{index}", index)
             except PlacementStopped:
                 if index == 0 or not layout.zoom_out_on_failure:
                     raise
@@ -300,9 +283,7 @@ def play_desktop_round(
                 desktop.scroll(-layout.scroll_notches)
                 report["steps"][-1]["action"] = f"scroll_down_{layout.scroll_notches}"
                 wait(layout.zoom_wait_ms)
-                last_map, point = identify(
-                    f"map_{index}_back", index - 1, settings.min_map_confidence
-                )
+                last_map, point = identify(f"map_{index}_back", index - 1)
                 report["zoomed_back"] = True
                 break
             if index == steps:

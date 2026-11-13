@@ -31,6 +31,8 @@ class LocationGuess(StrictModel):
     reasoning: str
     setting: Literal["urban", "suburban", "rural", "highway", "unknown"]
     country: str
+    # ISO 3166-1 alpha-2, so predictions can be scored against labelled datasets.
+    country_code: str
     region: str
     city: str
     # Centre of the city the scene is believed to be inside, and the probability that it is.
@@ -182,11 +184,9 @@ class Settings(StrictModel):
     round_selector: str | None = None
     result_selector: str | None = None
     settle_ms: int = Field(default=1200, ge=0, le=10000)
-    min_location_confidence: float = Field(default=0.35, ge=0, le=1)
     # Urban scenes are placed on the identified city's centre when the model is this sure.
     city_snap: bool = True
     city_snap_min_confidence: float = Field(default=0.6, ge=0, le=1)
-    min_map_confidence: float = Field(default=0.6, ge=0, le=1)
     map_change_tolerance: float = Field(default=0.002, ge=0, le=0.05)
     desktop_layout: FixedLayout = Field(default_factory=FixedLayout)
 

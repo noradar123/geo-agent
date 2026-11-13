@@ -39,7 +39,8 @@ Fill the fields in order; do not decide the country before finishing clues and r
    region using regional clues (area codes, plate codes, terrain, vegetation, settlement style).
 3. setting: urban (inside a city or town: dense buildings, shops, sidewalks, city streets),
    suburban, rural, highway (a major road outside settlements), or unknown.
-4. country, region, city (the city or town the scene is in or nearest to; empty if unknown).
+4. country, country_code (ISO 3166-1 alpha-2, uppercase, e.g. "TW"), region, city (the city
+   or town the scene is in or nearest to; empty if unknown).
    city_latitude/city_longitude: the real centre coordinates of that city (null if no city),
    and city_confidence: the probability (0..1) that the scene is actually inside that city.
    Only give a high city_confidence when the setting is urban and the evidence points to that

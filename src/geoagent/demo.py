@@ -14,6 +14,7 @@ class DemoVision:
             reasoning="離線測試固定輸出",
             setting="urban",
             country="台灣",
+            country_code="TW",
             region="台北",
             city="台北市",
             city_latitude=25.033,

@@ -91,14 +91,13 @@ def map_point(fx, fy):
 def test_fraction_to_desktop_pixel():
     layout = FixedLayout()
     target = MapTarget(visible=True, x_fraction=0.5, y_fraction=0.25, confidence=1, reason="")
-    assert plan_map_click(layout, target, 0.6) == Point(x=1448, y=588)
+    assert plan_map_click(layout, target) == Point(x=1448, y=588)
 
 
 @pytest.mark.parametrize(
     "visible,x,y,confidence,reason",
     [
         (False, 0.5, 0.5, 0.9, "not visible"),
-        (True, 0.5, 0.5, 0.3, "below"),
         (True, 0.995, 0.5, 0.9, "edge"),
         # (1043, 457) is the + button: (1043-1016)/864, (457-430)/630
         (True, 27 / 864, 27 / 630, 0.9, "control"),
@@ -110,7 +109,7 @@ def test_unsafe_targets_stop(visible, x, y, confidence, reason):
         visible=visible, x_fraction=x, y_fraction=y, confidence=confidence, reason=""
     )
     with pytest.raises(PlacementStopped, match=reason):
-        plan_map_click(layout, target, 0.6)
+        plan_map_click(layout, target)
 
 
 def test_layout_scales_only_with_matching_aspect():
@@ -229,25 +228,26 @@ def test_uncertain_intermediate_step_still_zooms(tmp_path):
     assert report["click"] == dict(zip("xy", map_point(*TARGETS[3][:2])))
 
 
-def test_low_confidence_final_step_stops_without_zooming_back(tmp_path):
+def test_low_confidence_final_step_still_clicks(tmp_path):
     desktop = FakeDesktop()
-    targets = TARGETS[:3] + [(0.5, 0.5, 0.3)]
+    targets = TARGETS[:3] + [(0.5, 0.5, 0.05)]
     report = play_desktop_round(desktop, SETTINGS, ZoomVision(desktop, targets), tmp_path, "place")
-    assert report["status"] == "stopped" and "below" in report["stop_reason"]
-    assert desktop.scrolls == 3 and not any(e[0] == "click" for e in desktop.events)
+    assert report["status"] == "placed" and "zoomed_back" not in report
+    clicks = [e[1:] for e in desktop.events if e[0] == "click"]
+    assert clicks == [map_point(0.5, 0.5)]
 
 
-def test_low_confidence_after_zoom_stops_without_click(tmp_path):
+def test_low_location_confidence_still_guesses(tmp_path):
     desktop = FakeDesktop()
-    targets = [TARGETS[0], (0.5, 0.5, 0.2)]
-    settings = Settings(
-        desktop_layout=FixedLayout(zoom_steps=1, scroll_notches=1, zoom_out_on_failure=False)
-    )
-    report = play_desktop_round(desktop, settings, ZoomVision(desktop, targets), tmp_path, "submit")
-    assert report["status"] == "stopped"
-    assert "below" in report["stop_reason"]
-    assert len(report["steps"]) == 2 and "point" not in report["steps"][1]
-    assert not any(e[0] == "click" for e in desktop.events)
+    vision = ZoomVision(desktop, TARGETS)
+    base_locate = vision.locate
+
+    def unsure(images, run_dir):
+        return base_locate(images, run_dir).model_copy(update={"confidence": 0.01})
+
+    vision.locate = unsure
+    report = play_desktop_round(desktop, SETTINGS, vision, tmp_path, "submit")
+    assert report["status"] == "submit_clicked"
 
 
 def test_scaled_screen_uses_scaled_coordinates(tmp_path):

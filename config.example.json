@@ -12,8 +12,6 @@
   "round_selector": null,
   "result_selector": null,
   "settle_ms": 1200,
-  "min_location_confidence": 0.35,
-  "min_map_confidence": 0.6,
   "map_change_tolerance": 0.002,
   "desktop_layout": {
     "reference_width": 1917,

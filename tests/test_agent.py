@@ -1,4 +1,3 @@
-import json
 from pathlib import Path
 
 import pytest
@@ -49,37 +48,20 @@ def test_round_modes(game, tmp_path, mode, status):
         assert page.locator("#result").is_hidden()
 
 
-def test_low_confidence_cannot_click(game, tmp_path):
-    page, settings = game
-
-    class Uncertain(DemoVision):
-        def locate(self, images, run_dir):
-            guess = super().locate(images, run_dir)
-            guess.confidence = 0.01
-            return guess
-
-    with pytest.raises(ValueError, match="Location confidence"):
-        play_round(page, settings, Uncertain(), tmp_path, "submit")
-    assert page.locator("#pin").is_hidden()
-    report = json.loads((tmp_path / "report.json").read_text(encoding="utf-8"))
-    assert report["status"] == "error"
-
-
-@pytest.mark.parametrize("visible,confidence", [(False, 0.99), (True, 0.01)])
-def test_uncertain_map_cannot_click(game, tmp_path, visible, confidence):
+def test_invisible_map_target_cannot_click(game, tmp_path):
     page, settings = game
 
     class Uncertain(DemoVision):
         def map_target(self, image, guess, run_dir):
             return MapTarget(
-                visible=visible,
-                confidence=confidence,
+                visible=False,
+                confidence=0.99,
                 x_fraction=0.5,
                 y_fraction=0.5,
                 reason="Cannot place reliably",
             )
 
-    with pytest.raises(ValueError, match="not reliably visible"):
+    with pytest.raises(ValueError, match="not visible"):
         play_round(page, settings, Uncertain(), tmp_path, "submit")
     assert page.locator("#pin").is_hidden()
 
