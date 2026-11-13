@@ -24,16 +24,20 @@ guess map screenshot
 
 ## Results
 
-Street-scene guess (`locate()`) on OpenStreetView-5M test images, `gpt-6.1-sol` with low reasoning effort, one 682×512 view per image (`scripts/eval_locate.py`, seed 0):
+All runs use `gpt-6.1-sol` with low reasoning effort.
 
-| Sample | n | Median error | Country | ≤25 km | ≤200 km | ≤750 km | ≤2500 km | Score* | Latency |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| Uniform random (dataset distribution) | 100 | 526 km | 60% | 15% | 33% | 55% | 75% | 2874 | 24 s |
-| One image per country | 50 | 779 km | 34% | 12% | 24% | 46% | 68% | 2529 | 25 s |
+| Setting | n | Median error | Country | ≤25 km | ≤200 km | ≤750 km | ≤2500 km | Score* |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| **In game**: Google Street View, 4 views, final map click | 10 | **37 km** | **90%** | 20% | 90% | 100% | 100% | 4801 |
+| OSV-5M, uniform random sample | 100 | 526 km | 60% | 15% | 33% | 55% | 75% | 2874 |
+| OSV-5M, one image per country | 50 | 779 km | 34% | 12% | 24% | 46% | 68% | 2529 |
 
-\*Approximate GeoGuessr world-map score per round (max 5000). Estimated API cost: about $0.013 per image.
+\*Approximate world-map score per round, `5000·e^(−d/1492.7)` (max 5000).
 
-The uniform sample is the standard protocol; the per-country sample weights every country equally and was much harder because 8 of 50 images came from small Caribbean and Pacific islands with similar-looking scenery. OSV-5M images are crowd-sourced Mapillary photos from a single forward view, without the 360° view or Google Street View camera traits available in the game. Confidence values are the model's own estimates and are not calibrated.
+- **In game:** single-player world-map rounds played with `desktop-run --submit`; distances read from the result screen. This is end-to-end, so it includes map placement. The one country miss was a Senegal round placed 93 km away inside The Gambia, which is surrounded by Senegal. Ten rounds is a small sample.
+- **OSV-5M:** only the street-scene guess (`locate()`), one 682×512 forward view per image (`scripts/eval_locate.py`, seed 0, about $0.013 per image). The images are crowd-sourced Mapillary photos, so the 360° view and Google Street View camera traits are missing. The uniform sample follows the dataset's distribution, the standard protocol. The per-country sample weights every country equally; 8 of its 50 images are small Caribbean and Pacific islands.
+
+The gap between the rows suggests that much of the in-game accuracy comes from the full panorama and coverage-specific cues, not just general scene understanding. Confidence values are the model's own estimates and are not calibrated.
 
 ## Setup
 
