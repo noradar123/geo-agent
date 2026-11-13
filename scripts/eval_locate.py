@@ -1,8 +1,12 @@
 """Benchmark the street-scene guess (Vision.locate) on OpenStreetView-5M test images.
 
-    python scripts/eval_locate.py prepare --n 50          # free: download a sample
-    python scripts/eval_locate.py run --budget 1.00       # paid: one request per image
-    python scripts/eval_locate.py report                  # free: metrics table
+    python scripts/eval_locate.py prepare --n 100                 # free: sample "uniform100"
+    python scripts/eval_locate.py run --sample uniform100 --budget 1.50   # paid
+    python scripts/eval_locate.py report                          # free: metrics table
+
+The default sample is uniformly random over the test set, as in the OSV-5M protocol, so the
+country mix follows the dataset (roughly by land area). `--strategy balanced` instead takes
+one image per country, which over-weights small island territories.
 
 Only the sampled images are fetched (HTTP range requests into the dataset's zip files).
 `run` is resumable and stops before a request could push spending past --budget.
@@ -14,6 +18,7 @@ import argparse
 import csv
 import io
 import json
+import random
 import sys
 import time
 import urllib.request
@@ -59,7 +64,11 @@ def prepare(args):
     with meta_path.open(encoding="utf-8", newline="") as f:
         rows = [r for r in csv.DictReader(f) if r["country"]]
 
-    sample = balanced_sample(rows, args.n, args.seed)
+    if args.strategy == "balanced":
+        sample = balanced_sample(rows, args.n, args.seed)
+    else:
+        sample = random.Random(args.seed).sample(rows, args.n)
+    name = args.sample or f"{args.strategy}{args.n}"
     images = ROOT / "images"
     images.mkdir(exist_ok=True)
     for i, row in enumerate(sample, 1):
@@ -69,13 +78,15 @@ def prepare(args):
             Image.open(io.BytesIO(zf.read(members[row["id"]]))).save(out)
         print(f"\r{i}/{len(sample)} images", end="", flush=True)
     print()
-    with (ROOT / "manifest.csv").open("w", encoding="utf-8", newline="") as f:
+    manifest = ROOT / "manifests" / f"{name}.csv"
+    manifest.parent.mkdir(exist_ok=True)
+    with manifest.open("w", encoding="utf-8", newline="") as f:
         writer = csv.DictWriter(f, META_FIELDS)
         writer.writeheader()
         writer.writerows(sample)
     countries = len({r["country"] for r in sample})
     mb = archive.bytes_fetched / 1e6
-    print(f"manifest.csv: {len(sample)} images from {countries} countries ({mb:.1f} MB fetched)")
+    print(f"{name}: {len(sample)} images from {countries} countries ({mb:.1f} MB fetched)")
 
 
 def load_results(path: Path) -> list[dict]:
@@ -94,16 +105,16 @@ def run(args):
     if args.effort is not None:
         vision.scene_effort = args.effort or None
     tag = args.tag or f"{vision.provider}-{vision.model}-{vision.scene_effort or 'default'}"
-    with (ROOT / "manifest.csv").open(encoding="utf-8", newline="") as f:
+    with (ROOT / "manifests" / f"{args.sample}.csv").open(encoding="utf-8", newline="") as f:
         manifest = list(csv.DictReader(f))[: args.limit]
-    results_path = ROOT / "results" / f"{tag}.jsonl"
+    results_path = ROOT / "results" / args.sample / f"{tag}.jsonl"
     results_path.parent.mkdir(parents=True, exist_ok=True)
     results = load_results(results_path)
     done = {r["id"] for r in results}
     spent = sum(r.get("cost_usd", 0) for r in results)
     recoverable = (*provider_errors(), RuntimeError, ValidationError, OSError)
     todo = [row for row in manifest if row["id"] not in done]
-    print(f"{tag}: {len(done)} done, {len(todo)} to go, ${spent:.3f} spent of ${args.budget:.2f}")
+    print(f"{args.sample} / {tag}: {len(done)} done, {len(todo)} to go, ${spent:.3f} spent of ${args.budget:.2f}")
 
     for row in todo:
         observed = [r["cost_usd"] for r in results if r.get("cost_usd")]
@@ -111,7 +122,7 @@ def run(args):
         if spent + next_cost > args.budget:
             print(f"Budget stop: next request may cost ~${next_cost:.3f}, ${spent:.3f} spent")
             break
-        run_dir = ROOT / "runs" / tag / row["id"]
+        run_dir = ROOT / "runs" / args.sample / tag / row["id"]
         run_dir.mkdir(parents=True, exist_ok=True)
         truth = {**row, "latitude": float(row["latitude"]), "longitude": float(row["longitude"])}
         record = {"id": row["id"], "country": row["country"]}
@@ -151,18 +162,18 @@ def run(args):
 
 def report(args):
     lines = [
-        "| Run | n | Median km | Country | "
+        "| Sample | Run | n | Median km | Country | "
         + " | ".join(f"≤{t} km" for t in THRESHOLDS_KM)
         + " | Score | Latency | Cost |",
-        "|" + "---|" * (7 + len(THRESHOLDS_KM)),
+        "|" + "---|" * (8 + len(THRESHOLDS_KM)),
     ]
-    for path in sorted((ROOT / "results").glob("*.jsonl")):
+    for path in sorted((ROOT / "results").glob("*/*.jsonl")):
         s = summarize(load_results(path))
         if not s["n"]:
             continue
         within = " | ".join(f"{s['within_km'][t]:.0%}" for t in THRESHOLDS_KM)
         lines.append(
-            f"| {path.stem} | {s['n']} | {s['median_km']} | {s['country_accuracy']:.0%} | "
+            f"| {path.parent.name} | {path.stem} | {s['n']} | {s['median_km']} | {s['country_accuracy']:.0%} | "
             f"{within} | {s['mean_score']} | {s['median_latency_s']} s | ${s['cost_usd']:.2f} |"
         )
     table = "\n".join(lines)
@@ -173,11 +184,14 @@ def report(args):
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     sub = parser.add_subparsers(dest="command", required=True)
-    p = sub.add_parser("prepare", help="download a country-balanced sample (no API calls)")
-    p.add_argument("--n", type=int, default=50)
+    p = sub.add_parser("prepare", help="download a sample of test images (no API calls)")
+    p.add_argument("--n", type=int, default=100)
+    p.add_argument("--strategy", choices=("uniform", "balanced"), default="uniform")
+    p.add_argument("--sample", help="sample name (default: strategy + n, e.g. uniform100)")
     p.add_argument("--seed", type=int, default=0)
     p.add_argument("--shard", default="00", help="test zip to sample from (00-04)")
-    r = sub.add_parser("run", help="call the vision model on the manifest (paid)")
+    r = sub.add_parser("run", help="call the vision model on a sample (paid)")
+    r.add_argument("--sample", required=True, help="sample name from prepare")
     r.add_argument("--budget", type=float, default=1.0, help="hard USD cap for this run tag")
     r.add_argument("--limit", type=int, help="only the first N manifest images")
     r.add_argument("--provider")

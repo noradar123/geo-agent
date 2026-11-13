@@ -24,15 +24,16 @@ guess map screenshot
 
 ## Results
 
-Run on 50 OpenStreetView-5M test images, one each from 50 countries (`scripts/eval_locate.py`, seed 0, single 682×512 view, no game UI):
+Street-scene guess (`locate()`) on OpenStreetView-5M test images, `gpt-6.1-sol` with low reasoning effort, one 682×512 view per image (`scripts/eval_locate.py`, seed 0):
 
-| Model | Median error | Country | ≤25 km | ≤200 km | ≤750 km | ≤2500 km | Score* | Latency | Cost |
+| Sample | n | Median error | Country | ≤25 km | ≤200 km | ≤750 km | ≤2500 km | Score* | Latency |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| `gpt-6.1-sol` (effort low) | 779 km | 34% | 12% | 24% | 46% | 68% | 2529 | 25 s | $0.65 total |
+| Uniform random (dataset distribution) | 100 | 526 km | 60% | 15% | 33% | 55% | 75% | 2874 | 24 s |
+| One image per country | 50 | 779 km | 34% | 12% | 24% | 46% | 68% | 2529 | 25 s |
 
-\*Approximate GeoGuessr world-map score per round (max 5000).
+\*Approximate GeoGuessr world-map score per round (max 5000). Estimated API cost: about $0.013 per image.
 
-This is a deliberately hard setting: one sample per country includes many countries with little or no Google Street View coverage, and OSV-5M images are crowd-sourced Mapillary photos, often low-resolution road shots without signs. The country-balanced draw also gives each country equal weight instead of following a game's distribution. In-game accuracy with four rotated views will differ. Confidence values are the model's own estimates and are not calibrated.
+The uniform sample is the standard protocol; the per-country sample weights every country equally and was much harder because 8 of 50 images came from small Caribbean and Pacific islands with similar-looking scenery. OSV-5M images are crowd-sourced Mapillary photos from a single forward view, without the 360° view or Google Street View camera traits available in the game. Confidence values are the model's own estimates and are not calibrated.
 
 ## Setup
 
@@ -73,12 +74,12 @@ Each run writes `runs/<timestamp>/`: screenshots, `location.json`, every raw API
 ## Evaluation
 
 ```powershell
-python scripts/eval_locate.py prepare --n 50       # free: country-balanced sample
-python scripts/eval_locate.py run --budget 1.00    # paid: stops before exceeding budget
-python scripts/eval_locate.py report               # metrics table -> eval/osv5m/summary.md
+python scripts/eval_locate.py prepare --n 100                       # free: uniform random sample
+python scripts/eval_locate.py run --sample uniform100 --budget 1.50  # paid, capped
+python scripts/eval_locate.py report                                # -> eval/osv5m/summary.md
 ```
 
-`prepare` uses HTTP range requests to fetch only the sampled images from the dataset's multi-GB zip files (about 18 MB for 50 images). `run` is resumable, logs every request, and estimates cost from token usage (`--input-price` / `--output-price` per 1M tokens). Metrics: median error, accuracy within 1/25/200/750/2500 km, country accuracy (via an ISO `country_code` in the schema), and an approximate GeoGuessr score `5000·e^(−d/1492.7)`.
+`prepare` uses HTTP range requests to fetch only the sampled images from the dataset's multi-GB zip files (about 31 MB for 100 images). `run` is resumable, logs every request, and estimates cost from token usage (`--input-price` / `--output-price` per 1M tokens). Metrics: median error, accuracy within 1/25/200/750/2500 km, country accuracy (via an ISO `country_code` in the schema), and an approximate GeoGuessr score `5000·e^(−d/1492.7)`.
 
 ## Development
 
