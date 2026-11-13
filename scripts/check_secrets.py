@@ -11,7 +11,9 @@ PATTERNS = {
     "OpenAI key": re.compile(rb"sk-(?:proj-|svcacct-)?[A-Za-z0-9_-]{20,}"),
     "GitHub token": re.compile(rb"(?:gh[opsur]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,})"),
     "private key": re.compile(rb"-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----"),
+    "Google API key": re.compile(rb"AIza[0-9A-Za-z_-]{35}"),
 }
+KEY_NAMES = ("OPENAI_API_KEY", "ANTHROPIC_API_KEY", "GEMINI_API_KEY", "GOOGLE_API_KEY")
 PRIVATE_PARTS = {".browser-profile", ".playwright-browsers", ".venv", ".codex", ".agents", "runs"}
 
 
@@ -23,13 +25,14 @@ def git(*args: str) -> bytes:
 def local_keys(root: Path) -> list[bytes]:
     """Read local API values for exact matching; never log those values."""
     keys = []
-    value = os.getenv("OPENAI_API_KEY", "").strip()
-    if value:
-        keys.append(value.encode())
+    for name in KEY_NAMES:
+        value = os.getenv(name, "").strip()
+        if value:
+            keys.append(value.encode())
     env_file = root / ".env"
     if env_file.exists():
         for line in env_file.read_text(encoding="utf-8-sig").splitlines():
-            match = re.match(r"\s*(?:export\s+)?OPENAI_API_KEY\s*=\s*(.*)", line)
+            match = re.match(rf"\s*(?:export\s+)?(?:{'|'.join(KEY_NAMES)})\s*=\s*(.*)", line)
             if match:
                 value = match[1].strip()
                 if value.startswith(("'", '"')):

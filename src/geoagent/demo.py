@@ -11,9 +11,14 @@ class DemoVision:
 
     def locate(self, images, run_dir):
         return LocationGuess(
+            reasoning="離線測試固定輸出",
+            setting="urban",
             country="台灣",
             region="台北",
             city="台北市",
+            city_latitude=25.033,
+            city_longitude=121.5654,
+            city_confidence=0.95,
             latitude=25.033,
             longitude=121.5654,
             confidence=0.95,

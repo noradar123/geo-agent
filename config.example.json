@@ -14,5 +14,53 @@
   "settle_ms": 1200,
   "min_location_confidence": 0.35,
   "min_map_confidence": 0.6,
-  "map_change_tolerance": 0.002
+  "map_change_tolerance": 0.002,
+  "desktop_layout": {
+    "reference_width": 1917,
+    "reference_height": 1198,
+    "content_rect": {
+      "x": 0.0,
+      "y": 109.0,
+      "width": 1917.0,
+      "height": 1032.0
+    },
+    "minimap_rect": {
+      "x": 1573.0,
+      "y": 875.0,
+      "width": 307.0,
+      "height": 185.0
+    },
+    "hover": {
+      "x": 1725.0,
+      "y": 960.0
+    },
+    "map_rect": {
+      "x": 1016.0,
+      "y": 430.0,
+      "width": 864.0,
+      "height": 630.0
+    },
+    "zoom_in_button": {
+      "x": 1043.0,
+      "y": 457.0
+    },
+    "zoom_out_button": {
+      "x": 1043.0,
+      "y": 487.0
+    },
+    "guess_button": {
+      "x": 1448.0,
+      "y": 1098.0
+    },
+    "control_radius": 22,
+    "edge_margin": 0.02,
+    "expand_wait_ms": 1500,
+    "zoom_wait_ms": 1500,
+    "click_wait_ms": 1000,
+    "zoom_steps": 5,
+    "scroll_notches": 2,
+    "zoom_out_on_failure": true,
+    "aspect_tolerance": 0.01,
+    "window_title_contains": "GeoGuessr"
+  }
 }

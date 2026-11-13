@@ -1,19 +1,30 @@
 import argparse
 import json
+import os
 import sys
 from pathlib import Path
 
 from dotenv import load_dotenv
-from openai import OpenAIError
 from playwright.sync_api import Error as PlaywrightError
 
-from .agent import play_round
+from .agent import play_desktop_round, play_round, rotate_view
 from .browser import browser_session, calibrate, inspect_ui, screenshot_scene
 from .demo import run_demo
 from .interactive import wait_for_enter
-from .screen import analyze_screen
+from .models import Settings
+from .screen import WindowsDesktop, analyze_screen, countdown
 from .storage import load_settings, new_run, save_json
-from .vision import Vision
+from .vision import PROVIDERS, Vision, provider_errors
+
+
+def add_model_args(command: argparse.ArgumentParser):
+    command.add_argument(
+        "--provider", choices=PROVIDERS, help="Vision API provider, overrides GEOAGENT_PROVIDER"
+    )
+    command.add_argument("--model", help="Model ID for this run, overrides the provider default")
+    command.add_argument(
+        "--map-model", help="Faster model for map placement steps, overrides GEOAGENT_MAP_MODEL"
+    )
 
 
 def parser() -> argparse.ArgumentParser:
@@ -49,6 +60,7 @@ def parser() -> argparse.ArgumentParser:
         command.add_argument(
             "--capture-only", action="store_true", help="Save PNG without API analysis"
         )
+        add_model_args(command)
     for name in ("login", "calibrate", "inspect", "browser-capture", "browser-run"):
         command = commands.add_parser(name)
         command.add_argument("--url", help="Game URL, overrides config for this execution")
@@ -62,17 +74,54 @@ def parser() -> argparse.ArgumentParser:
                 "--no-wait", action="store_true", help="Skip terminal readiness/review prompts"
             )
         if name == "browser-run":
+            add_model_args(command)
             mode = command.add_mutually_exclusive_group()
             mode.add_argument("--place", action="store_true", help="Place the map pin")
             mode.add_argument("--submit", action="store_true", help="Place pin and click Guess")
+    desktop = commands.add_parser(
+        "desktop-run",
+        help="Analyze the scene, then expand/zoom the map with the real mouse (dry-run by default)",
+    )
+    desktop.add_argument(
+        "--delay",
+        type=int,
+        default=5,
+        choices=range(61),
+        metavar="SECONDS",
+        help="Countdown before capture, default 5 (0..60)",
+    )
+    desktop.add_argument(
+        "--zoom-steps",
+        type=int,
+        choices=range(11),
+        metavar="N",
+        help="Map zoom-in iterations, overrides desktop_layout.zoom_steps (0..10)",
+    )
+    add_model_args(desktop)
+    desktop_mode = desktop.add_mutually_exclusive_group()
+    desktop_mode.add_argument("--place", action="store_true", help="Click the map pin")
+    desktop_mode.add_argument("--submit", action="store_true", help="Place pin and click Guess")
+    rotate = commands.add_parser(
+        "rotate-test", help="Turn the street view once and save before/after; no API calls"
+    )
+    rotate.add_argument("--delay", type=int, default=5, choices=range(61), metavar="SECONDS")
+    rotate.add_argument("--degrees", type=float, default=90, help="Rotation angle, default 90")
     analyze = commands.add_parser("analyze", help="Analyze PNGs without opening the browser")
     analyze.add_argument("images", type=Path, nargs="+")
+    add_model_args(analyze)
     commands.add_parser("demo", help="Headless offline browser test; no OpenAI calls")
     return result
 
 
 def execute(args):
     load_dotenv()
+    # Vision() reads these, so CLI flags override .env for this process only.
+    if getattr(args, "provider", None):
+        os.environ["GEOAGENT_PROVIDER"] = args.provider
+    if getattr(args, "model", None):
+        os.environ["GEOAGENT_MODEL"] = args.model
+    if getattr(args, "map_model", None):
+        os.environ["GEOAGENT_MAP_MODEL"] = args.map_model
     if args.command in {"run", "screen", "capture"}:
         capture_only = args.command == "capture" or args.capture_only
         vision = None if capture_only else Vision()
@@ -109,6 +158,34 @@ def execute(args):
         save_json(path / "location.json", guess.model_dump())
         print(guess.model_dump_json(indent=2))
         print(f"Artifacts: {path.resolve()}")
+        return
+    if args.command == "rotate-test":
+        settings = load_settings(args.config) if args.config.exists() else Settings()
+        desktop = WindowsDesktop()
+        layout = settings.desktop_layout.scaled_to(*desktop.screen_size())
+        path = new_run()
+        countdown(args.delay)
+        desktop.grab(layout.content_rect, path / "before.png")
+        rotate_view(desktop, layout, args.degrees)
+        desktop.wait(layout.rotate_wait_ms)
+        desktop.grab(layout.content_rect, path / "after.png")
+        print(f"Saved {path / 'before.png'} and {path / 'after.png'}")
+        print(f"drag_px_per_degree={layout.drag_px_per_degree:.2f}, degrees={args.degrees}")
+        return
+    if args.command == "desktop-run":
+        # Desktop mode works without config.json; the file only overrides layout defaults.
+        settings = load_settings(args.config) if args.config.exists() else Settings()
+        vision = Vision()
+        desktop = WindowsDesktop()
+        path = new_run()
+        print(f"Artifacts: {path.resolve()}", flush=True)
+        countdown(args.delay)
+        mode = "submit" if args.submit else "place" if args.place else "dry-run"
+        report = play_desktop_round(desktop, settings, vision, path, mode, args.zoom_steps)
+        print(json.dumps(report, ensure_ascii=False, indent=2))
+        if report["status"] == "stopped":
+            print(f"Stopped: {report['stop_reason']}", file=sys.stderr)
+            raise SystemExit(2)
         return
     settings = load_settings(args.config)
     if args.url:
@@ -156,6 +233,13 @@ def main():
     except KeyboardInterrupt:
         print("\nCancelled.", file=sys.stderr)
         raise SystemExit(130)
-    except (ValueError, RuntimeError, OSError, EOFError, OpenAIError, PlaywrightError) as exc:
+    except (
+        ValueError,
+        RuntimeError,
+        OSError,
+        EOFError,
+        PlaywrightError,
+        *provider_errors(),
+    ) as exc:
         print(f"Error: {exc}", file=sys.stderr)
         raise SystemExit(1)
