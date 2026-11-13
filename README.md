@@ -24,12 +24,15 @@ guess map screenshot
 
 ## Results
 
-Run on 50 OpenStreetView-5M test images, one per country (`scripts/eval_locate.py`, single view, no game UI):
+Run on 50 OpenStreetView-5M test images, one each from 50 countries (`scripts/eval_locate.py`, seed 0, single 682×512 view, no game UI):
 
-<!-- RESULTS -->
-_Benchmark run in progress; table coming soon._
+| Model | Median error | Country | ≤25 km | ≤200 km | ≤750 km | ≤2500 km | Score* | Latency | Cost |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| `gpt-6.1-sol` (effort low) | 779 km | 34% | 12% | 24% | 46% | 68% | 2529 | 25 s | $0.65 total |
 
-Confidence values are the model's own estimates and are not calibrated. OSV-5M images are crowd-sourced Mapillary photos, not Google Street View, so in-game accuracy may differ.
+\*Approximate GeoGuessr world-map score per round (max 5000).
+
+This is a deliberately hard setting: one sample per country includes many countries with little or no Google Street View coverage, and OSV-5M images are crowd-sourced Mapillary photos, often low-resolution road shots without signs. The country-balanced draw also gives each country equal weight instead of following a game's distribution. In-game accuracy with four rotated views will differ. Confidence values are the model's own estimates and are not calibrated.
 
 ## Setup
 
